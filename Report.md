@@ -11,7 +11,7 @@
   - only periodically updated, thereby reducing correlations with the target
   
   * Excerpted from the Human-level control through deep reinforcement learning(Nature)
-  
+  ![Algorithm](https://user-images.githubusercontent.com/47571946/58063483-6d094100-7bb9-11e9-8388-f4c23d74d72c.png)
 # Model architectures
 ## Project is consisyt of:
   1. model.py
