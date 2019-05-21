@@ -46,3 +46,15 @@ The task is episodic, and in order to solve the environment, your agent must get
     - pip3 install https://download.pytorch.org/whl/cu100/torch-1.0.1-cp36-cp36m-win_amd64.whl
     - pip3 install torchvision
     Latest versions of ml-agnets and pytorch is not match exactly(got some warning but it works)
+
+### How to Use
+1. Clone github in your computer
+
+2. Refer to installation procedure to satisfy deendency
+
+3. Launch the Jupiter Notebook to open the Navigation.ipynb file.
+
+4. Enjoy it while you run it to the end.
+
+Extra. See what changes are made by changing the value of the Hyperparameter from 11 to 16 lines in the dqn_agent.py file or the fc1_units, fc2_units in the model.dqn_agent.py file.
+* Only one Hyperperameter at a time must be transformed to observe change
