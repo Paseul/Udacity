@@ -12,6 +12,7 @@
   
   * Excerpted from the Human-level control through deep reinforcement learning(Nature)
   ![Algorithm](https://user-images.githubusercontent.com/47571946/58063483-6d094100-7bb9-11e9-8388-f4c23d74d72c.png)
+  * screenshot is taken from the Deep Reinforcement Learning Nanodegree course
 # Model architectures
 ## Project is consisyt of:
   1. model.py
@@ -39,12 +40,13 @@ Input(37, state) -> fc(64, relu) -> fc(64, relu) -> output(4, action)
 
 # Plot of Rewords
 ## Neural Networks
-
+![nural-network](https://user-images.githubusercontent.com/47571946/58063890-07b64f80-7bbb-11e9-89e2-b74748956240.png)
 ## Batchsize
-
+![Batch_size](https://user-images.githubusercontent.com/47571946/58063902-0f75f400-7bbb-11e9-9449-9c546c88fb06.png)
 ## Buffersize
-
+![Buffer_size](https://user-images.githubusercontent.com/47571946/58063909-14d33e80-7bbb-11e9-8ab6-1b39fe8b1533.png)
 ## Gamma
+![Gamma](https://user-images.githubusercontent.com/47571946/58063914-1d2b7980-7bbb-11e9-9df9-ad1bfcd03915.png)
 
 # Ideas for Future Work
 ## Larning from Pixels
