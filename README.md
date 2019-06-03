@@ -85,4 +85,4 @@ pip3 install unityagents==0.4.0
 
 2. Follow the instructions in `Continuous_Control.ipynb` to get started with training your own agent!  
 
-3. If the average score is overs 30, 'checkpoint_actor.pth', 'checkpoint_critic.pth' files will be created
+3. If the average score is overs 30, `checkpoint_actor.pth`, `checkpoint_critic.pth` files will be created
