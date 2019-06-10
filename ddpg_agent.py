@@ -55,6 +55,20 @@ class Agent():
         """Save experience in replay memory, and use random sample from buffer to learn."""
         # Save experience / reward
         self.memory.add(state, action, reward, next_state, done)
+        if reward >= 0.09 and reward <= 0.1:
+            self.memory.add(state, action, reward, next_state, done)
+        if reward >= 0.19 and reward <= 0.2:
+            for _ in range(2):
+                self.memory.add(state, action, reward, next_state, done)
+        if reward >= 0.29 and reward <= 0.3:
+            for _ in range(3):
+                self.memory.add(state, action, reward, next_state, done)
+        if reward >= 0.39 and reward <= 0.4:
+            for _ in range(4):
+                self.memory.add(state, action, reward, next_state, done)
+        if reward >= 0.5:
+            for _ in range(5):
+                self.memory.add(state, action, reward, next_state, done)
                 
         # Learn, if enough samples are available in memory
         if len(self.memory) > BATCH_SIZE:
