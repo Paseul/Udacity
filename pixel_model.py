@@ -11,7 +11,7 @@ class DQN(nn.Module):
         self.conv2 = nn.Conv2d(16, 32, kernel_size=5, stride=2)
         self.bn2 = nn.BatchNorm2d(32)
         self.conv3 = nn.Conv2d(32, 32, kernel_size=5, stride=2)
-        self.bn3 = nn.BatchNorm2d(32)
+        self.bn3 = nn.BatchNorm2d(32)        
 
         # Number of Linear input connections depends on output of conv2d layers
         # and therefore the input image size, so compute it.
@@ -20,7 +20,9 @@ class DQN(nn.Module):
         convw = conv2d_size_out(conv2d_size_out(conv2d_size_out(84)))
         convh = conv2d_size_out(conv2d_size_out(conv2d_size_out(84)))
         linear_input_size = convw * convh * 32
-        self.head = nn.Linear(linear_input_size, action_size)
+        self.head = nn.Linear(linear_input_size, 512)
+        self.fc2 = nn.Linear(512, 256)
+        self.fc3 = nn.Linear(256, action_size)
 
     # Called with either one element to determine next action, or a batch
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
@@ -28,4 +30,11 @@ class DQN(nn.Module):
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
-        return self.head(x.view(x.size(0), -1))
+        x = F.relu(self.head(x.view(x.size(0), -1)))
+        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
+        #x = F.relu(self.fc1(x))
+        #x = F.relu(self.fc2(x))
+        #return self.fc3(x)
+        return x
+        #return self.head(x.view(x.size(0), -1))
