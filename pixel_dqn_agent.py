@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 
-BUFFER_SIZE = int(3e4)  # replay buffer size
+BUFFER_SIZE = int(1e5)  # replay buffer size
 BATCH_SIZE = 32        # minibatch size
 GAMMA = 0.99            # discount factor
 TAU = 1e-3              # for soft update of target parameters
@@ -47,6 +47,18 @@ class Agent():
     def step(self, state, action, reward, next_state, done, i_episode):
         # Save experience in replay memory
         self.memory.add(state, action, reward, next_state, done)
+        if reward >= 1:
+            self.memory.add(state, action, reward, next_state, done)
+        if reward >= 3:
+            self.memory.add(state, action, reward, next_state, done)
+        if reward >= 5:
+            self.memory.add(state, action, reward, next_state, done)
+        if reward >= 7:
+            self.memory.add(state, action, reward, next_state, done)
+        if reward >= 9:
+            self.memory.add(state, action, reward, next_state, done)
+        if reward >= 11:
+            self.memory.add(state, action, reward, next_state, done)
                 
         # Learn every UPDATE_EVERY time steps.
         self.t_step = (self.t_step + 1) % UPDATE_EVERY
