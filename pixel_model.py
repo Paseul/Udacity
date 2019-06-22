@@ -26,7 +26,7 @@ class DQN(nn.Module):
         
         self.seed = torch.manual_seed(seed)
         
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=(3,3), stride=1, padding=(1,1))
+        self.conv1 = nn.Conv2d(12, 16, kernel_size=(3,3), stride=1, padding=(1,1))
         self.conv1bnorm = nn.BatchNorm2d(16)
         self.conv1relu = nn.ReLU()
         self.conv1maxp = nn.MaxPool2d(kernel_size=(2,2), stride=(2,2))
