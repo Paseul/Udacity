@@ -47,7 +47,7 @@ class Agent():
     def step(self, state, action, reward, next_state, done, i_episode):
         # Save experience in replay memory
         self.memory.add(state, action, reward, next_state, done)
-                
+                       
         # Learn every UPDATE_EVERY time steps.
         self.t_step = (self.t_step + 1) % UPDATE_EVERY
         if self.t_step == 0:
