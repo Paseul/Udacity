@@ -49,11 +49,11 @@ class Agent():
         self.memory.add(state, action, reward, next_state, done)
                        
         # Learn every UPDATE_EVERY time steps.
-        self.t_step = (self.t_step + 1) % UPDATE_EVERY
-        if self.t_step == 0:
-            if len(self.memory) > BATCH_SIZE :
-                experiences = self.memory.stack_sample()
-                self.learn(experiences, GAMMA)
+        #self.t_step = (self.t_step + 1) % UPDATE_EVERY
+        #if self.t_step == 0:
+        if len(self.memory) > BATCH_SIZE :
+            experiences = self.memory.stack_sample()
+            self.learn(experiences, GAMMA)
 
     def stack_state(self, state):
         #state = state[0][0].reshape((-1,84,84))
@@ -106,9 +106,9 @@ class Agent():
         states, actions, rewards, next_states, dones = experiences
         
         ## (1) Get the best action at next state using orininal Q network
-        best_action_next = self.qnetwork_local(next_states).detach().max(1)[1].unsqueeze(1)
+        best_action_next = self.qnetwork_local(next_states).detach().argmax(1).unsqueeze(1)
         ## (2) calculate Q value using target network for next state at these actions, predicted at step 1      
-        Q_targets_next = self.qnetwork_target(next_states).detach().gather(1, best_action_next)
+        Q_targets_next = self.qnetwork_target(next_states).gather(1, best_action_next)
         
         # Get max predicted Q values (for next states) from target model
         #Q_targets_next = self.qnetwork_target(next_states).detach().max(1)[0].unsqueeze(1)
