@@ -43,17 +43,21 @@ class Agent():
         self.memory = ReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, seed)
         # Initialize time step (for updating every UPDATE_EVERY steps)
         self.t_step = 0
+        
+        self.last_frame = None
+        self.last2_frame = None
+        self.last3_frame = None
     
     def step(self, state, action, reward, next_state, done, i_episode):
         # Save experience in replay memory
         self.memory.add(state, action, reward, next_state, done)
                        
         # Learn every UPDATE_EVERY time steps.
-        #self.t_step = (self.t_step + 1) % UPDATE_EVERY
-        #if self.t_step == 0:
-        if len(self.memory) > BATCH_SIZE :
-            experiences = self.memory.stack_sample()
-            self.learn(experiences, GAMMA)
+        self.t_step = (self.t_step + 1) % UPDATE_EVERY
+        if self.t_step == 0:
+            if len(self.memory) > BATCH_SIZE :
+                experiences = self.memory.stack_sample()
+                self.learn(experiences, GAMMA)
 
     def stack_state(self, state):
         #state = state[0][0].reshape((-1,84,84))
@@ -67,11 +71,11 @@ class Agent():
             pre_pre_pre_exp = self.memory.memory[idx-3].state
             #pre_pre_pre_exp = pre_pre_pre_exp[0][0].reshape((-1,84,84))
 
-            stack_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, state), axis=1)
-            #stack_state = stack_state.reshape((-1,4,84,84))
+            stack_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, state), axis=0)
+            stack_state = stack_state.reshape((-1,4,3,84,84))
         else:
-            stack_state = np.concatenate((state, state, state, state), axis=1)
-            #stack_state = stack_state.reshape((-1,4,84,84))
+            stack_state = np.concatenate((state, state, state, state), axis=0)
+            stack_state = stack_state.reshape((-1,4,3,84,84))
 
         return stack_state
         
@@ -202,12 +206,14 @@ class ReplayBuffer:
             #pre_pre_pre_exp = pre_pre_pre_exp[0][0].reshape((-1,84,84))
             #next_exp = next_exp[0][0].reshape((-1,84,84))
             
-            stack_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), axis=1)
+            stack_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), axis=0)
+            stack_state = stack_state.reshape((-1,4,3,84,84))
             #stack_state = stack_state.reshape((-1,4,84,84))
             stack_states.append(stack_state)
             actions.append(self.memory[idx].action)
             rewards.append(self.memory[idx].reward)
-            next_stack_state = np.concatenate((pre_pre_exp, pre_exp, exp, next_exp), axis=1)
+            next_stack_state = np.concatenate((pre_pre_exp, pre_exp, exp, next_exp), axis=0)
+            next_stack_state = next_stack_state.reshape((-1,4,3,84,84))
             #next_stack_state = next_stack_state.reshape((-1,4,84,84))
             next_stack_states.append(next_stack_state)
             dones.append(self.memory[idx].done)
