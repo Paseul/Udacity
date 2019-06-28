@@ -12,15 +12,15 @@ class DDQN(nn.Module):
         nfilters = [128, 128*2, 128*2]
         self.seed = torch.manual_seed(seed)
         self.conv1 = nn.Conv3d(4, 16, kernel_size=1)
-        self.bn1 = nn.BatchNorm3d(nfilters[0])
+        self.bn1 = nn.BatchNorm3d(16)
         self.conv2 = nn.Conv3d(16, 32, kernel_size=1)#, output_padding = (1,1))
-        self.bn2 = nn.BatchNorm3d(nfilters[1])
+        self.bn2 = nn.BatchNorm3d(32)
         self.conv3 = nn.Conv3d(16, 16, kernel_size=1)#, output_padding = (1,1))
         self.bn3 = nn.BatchNorm3d(nfilters[2])
        
         x = torch.rand(shape)
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = F.relu(self.bn2(self.conv2(x)))
         #x = F.relu(self.conv3(x))
         x = x.view(x.size(0), -1)
         conv_out_size = x.data.view(1, -1).size(1)        
@@ -54,8 +54,8 @@ class DDQN(nn.Module):
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
     def forward(self, state):
             
-        state = F.relu(self.conv1(state))
-        state = F.relu(self.conv2(state))
+        state = F.relu(self.bn1(self.conv1(state)))
+        state = F.relu(self.bn2(self.conv2(state)))
         #state = F.relu(self.conv3(state))
         state = state.view(state.size(0), -1)
         state = F.relu(self.fc1(state))
