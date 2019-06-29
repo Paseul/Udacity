@@ -62,7 +62,7 @@ class Agent():
     def stack_state(self, state):
         #state = state[0][0].reshape((-1,84,84))
         
-        stack_state = np.zeros((1, 3, 4, 84, 84))
+        #stack_state = np.zeros((1, 3, 4, 84, 84))
         
         if len(self.memory) >= 3:
             idx = len(self.memory)
@@ -73,21 +73,21 @@ class Agent():
             pre_pre_pre_exp = self.memory.memory[idx-3].state
             #pre_pre_pre_exp = pre_pre_pre_exp[0][0].reshape((-1,84,84))
 
-            #stack_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, state), axis=0)
-            #stack_state = stack_state.reshape((-1,4,3,84,84))
+            stack_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, state), axis=1)
+            #stack_state = stack_state.reshape((-1,1,12,84,84))
             
-            stack_state[0, :, 0, :, :] = state
-            stack_state[0, :, 1, :, :] = pre_exp
-            stack_state[0, :, 2, :, :] = pre_pre_exp
-            stack_state[0, :, 3, :, :] = pre_pre_pre_exp
+            #stack_state[0, :, 0, :, :] = state
+            #stack_state[0, :, 1, :, :] = pre_exp
+            #stack_state[0, :, 2, :, :] = pre_pre_exp
+            #stack_state[0, :, 3, :, :] = pre_pre_pre_exp
         else:
-            #stack_state = np.concatenate((state, state, state, state), axis=0)
-            #stack_state = stack_state.reshape((-1,4,3,84,84))
+            stack_state = np.concatenate((state, state, state, state), axis=1)
+            #stack_state = stack_state.reshape((-1,1,12,84,84))
             
-            stack_state[0, :, 0, :, :] = state
-            stack_state[0, :, 1, :, :] = state
-            stack_state[0, :, 2, :, :] = state
-            stack_state[0, :, 3, :, :] = state
+            #stack_state[0, :, 0, :, :] = state
+            #stack_state[0, :, 1, :, :] = state
+            #stack_state[0, :, 2, :, :] = state
+            #stack_state[0, :, 3, :, :] = state
 
         return stack_state
         
@@ -213,37 +213,27 @@ class ReplayBuffer:
                 pre_pre_exp = self.memory[idx-2].state
                 pre_pre_pre_exp = self.memory[idx-3].state
                 next_exp = self.memory[idx+1].state
-
-            #e.state and e.next_state is in Nx3xHxW format (augment state in the C dimension)
-            #exp = exp[0][0].reshape((-1,84,84))
-            #pre_exp = pre_exp[0][0].reshape((-1,84,84))
-            #pre_pre_exp = pre_pre_exp[0][0].reshape((-1,84,84))
-            #pre_pre_pre_exp = pre_pre_pre_exp[0][0].reshape((-1,84,84))
-            #next_exp = next_exp[0][0].reshape((-1,84,84))
             
-            #stack_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), axis=0)
-            #stack_state = stack_state.reshape((-1,4,3,84,84))
-            #stack_state = stack_state.reshape((-1,4,84,84))
-            stack_state[0, :, 0, :, :] = exp
-            stack_state[0, :, 1, :, :] = pre_exp
-            stack_state[0, :, 2, :, :] = pre_pre_exp
-            stack_state[0, :, 3, :, :] = pre_pre_pre_exp
+            stack_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), axis=1)
+            #stack_state = stack_state.reshape((-1,1,12,84,84))
+            #stack_state[0, :, 0, :, :] = exp
+            #stack_state[0, :, 1, :, :] = pre_exp
+            #stack_state[0, :, 2, :, :] = pre_pre_exp
+            #stack_state[0, :, 3, :, :] = pre_pre_pre_exp
             
             stack_states.append(stack_state)
             actions.append(self.memory[idx].action)
             rewards.append(self.memory[idx].reward)
             
-            next_stack_state[0, :, 0, :, :] = next_exp
-            next_stack_state[0, :, 1, :, :] = exp
-            next_stack_state[0, :, 2, :, :] = pre_exp
-            next_stack_state[0, :, 3, :, :] = pre_pre_exp
-            #next_stack_state = np.concatenate((pre_pre_exp, pre_exp, exp, next_exp), axis=0)
-            #next_stack_state = next_stack_state.reshape((-1,4,3,84,84))
-            #next_stack_state = next_stack_state.reshape((-1,4,84,84))
+            #next_stack_state[0, :, 0, :, :] = next_exp
+            #next_stack_state[0, :, 1, :, :] = exp
+            #next_stack_state[0, :, 2, :, :] = pre_exp
+            #next_stack_state[0, :, 3, :, :] = pre_pre_exp
+            next_stack_state = np.concatenate((pre_pre_exp, pre_exp, exp, next_exp), axis=1)
+            #next_stack_state = next_stack_state.reshape((-1,1,12,84,84))
             next_stack_states.append(next_stack_state)
             dones.append(self.memory[idx].done)
 
-        #augment state is of shape Nx11x84x84
         states = torch.from_numpy(np.vstack([s for s in stack_states])).float().to(device)
         actions = torch.from_numpy(np.vstack([a for a in actions])).long().to(device)
         rewards = torch.from_numpy(np.vstack([r for r in rewards])).float().to(device)
