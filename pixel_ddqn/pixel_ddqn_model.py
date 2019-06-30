@@ -56,6 +56,10 @@ class DDQN(nn.Module):
         self.fc2relu = nn.ReLU()
         
         self.fc3 = nn.Linear(256, action_size)
+        
+        #Dualing Network
+        self.fc3_adv = nn.Linear(256, action_size)
+        self.fc3_v = nn.Linear(256, 1)
 
     # Called with either one element to determine next action, or a batch
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
@@ -91,6 +95,10 @@ class DDQN(nn.Module):
         state = self.fc2bnorm(state)
         state = self.fc2relu(state)'''
 
-        state = self.fc3(state)
+        #state = self.fc3(state)
+        #Dualing Network
+        adv = self.fc3_adv(state)
+        val = self.fc3_v(state).expand(-1, adv.size(1))
+        state = val + adv - adv.mean(1, keepdim=True).expand(-1, adv.size(1))
 
         return state
