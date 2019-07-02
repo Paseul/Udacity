@@ -42,7 +42,7 @@ class Agent():
 
         # Replay memory
         self.memory = ReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, seed)
-        self.td_error_memory = TDerrorMemory(BATCH_SIZE)
+        self.td_error_memory = TDerrorMemory(BUFFER_SIZE)
         # Initialize time step (for updating every UPDATE_EVERY steps)
         self.t_step = 0
     
@@ -58,8 +58,9 @@ class Agent():
                     experiences = self.memory.stack_sample()
                 else:
                     indexes = self.td_error_memory.get_prioritized_indexes(BATCH_SIZE)
-                    experiences = [self.memory[n] for n in indexes]
-                self.learn(experiences, GAMMA)
+                    for n in indexes:
+                        experiences = self.memory.index_sample(n)
+                        self.learn(experiences, GAMMA)
 
     def stack_state(self, state):
         if len(self.memory) >= 3:
@@ -123,14 +124,17 @@ class Agent():
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+        
+        print(rewards.shape)
                                 
         ############ td_error안에 리스트가 들어가는것 부터 해결해야함 TD 오차를 계산
         td_errors = (rewards.squeeze() + GAMMA * Q_targets_next.squeeze()) - best_action_next.squeeze().float()
         #td_errors = (rewards + GAMMA * Q_targets_next) - best_action_next
         # state_action_values는 size[minibatch*1]이므로 squeeze() 메서드로 size[minibatch]로 변환
-
+        #print(td_errors.shape)
         # TD 오차 메모리를 업데이트. Tensor를 detach() 메서드로 꺼내와서 NumPy 변수로 변환하고 다시 파이썬 리스트로 변환
         self.td_error_memory.memory = td_errors.cpu().detach().numpy().tolist()
+        #print(self.td_error_memory.memory)
 
         # ------------------- update target network ------------------- #
         self.soft_update(self.qnetwork_local, self.qnetwork_target, TAU)                     
@@ -166,9 +170,9 @@ class ReplayBuffer:
             seed (int): random seed
         """
         self.action_size = action_size
-        self.memory = deque(maxlen=buffer_size)  
-        self.capacity = batch_size
-        #self.memory = []  # 실제 transition을 저장할 변수
+        #self.memory = deque(maxlen=buffer_size)  
+        self.capacity = buffer_size
+        self.memory = []  # 실제 transition을 저장할 변수
         self.batch_size = batch_size
         self.experience = namedtuple("Experience", field_names=["state", "action", "reward", "next_state", "done"])
         self.seed = random.seed(seed)
@@ -176,9 +180,13 @@ class ReplayBuffer:
     
     def add(self, state, action, reward, next_state, done):
         """Add a new experience to memory."""
-        e = self.experience(state, action, reward, next_state, done)
-        self.memory.append(e)
         
+        if len(self.memory) < self.capacity:
+            self.memory.append(None)
+        
+        self.memory[self.index] = self.experience(state, action, reward, next_state, done)
+        #self.memory.append(e)
+        self.index = (self.index + 1) % self.capacity
         #if len(self.memory) < self.capacity:
         #    self.memory.append(None)
             
@@ -232,6 +240,36 @@ class ReplayBuffer:
   
         return (states, actions, rewards, next_states, dones)
 
+    def index_sample(self, idx):
+        """Randomly sample a batch of experiences from memory."""
+        idx_states = []    
+        actions = []
+        rewards = []
+        next_idx_states = []
+        dones = []
+        
+        exp = self.memory[idx].state
+        pre_exp = self.memory[idx-1].state
+        pre_pre_exp = self.memory[idx-2].state
+        pre_pre_pre_exp = self.memory[idx-3].state
+        next_exp = self.memory[idx% self.capacity+1].state
+            
+        idx_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), axis=1)          
+        idx_states.append(idx_state)
+        actions.append(self.memory[idx].action)
+        rewards.append(self.memory[idx].reward)
+        next_idx_state = np.concatenate((pre_pre_exp, pre_exp, exp, next_exp), axis=1)
+        next_idx_states.append(next_idx_state)
+        dones.append(self.memory[idx].done)
+
+        states = torch.from_numpy(np.vstack([s for s in idx_states])).float().to(device)
+        actions = torch.from_numpy(np.vstack([a for a in actions])).long().to(device)
+        rewards = torch.from_numpy(np.vstack([r for r in rewards])).float().to(device)
+        next_states = torch.from_numpy(np.vstack([ns for ns in next_idx_states])).float().to(device)
+        dones = torch.from_numpy(np.vstack([d for d in dones]).astype(np.uint8)).float().to(device)
+  
+        return (states, actions, rewards, next_states, dones)
+
     def __len__(self):
         """Return the current size of internal memory."""
         return len(self.memory)
@@ -240,14 +278,13 @@ TD_ERROR_EPSILON = 0.0001  # 오차에 더해줄 바이어스
 
 class TDerrorMemory:
 
-    def __init__(self, BATCH_SIZE):
-        self.capacity = BATCH_SIZE  # 메모리의 최대 저장 건수
+    def __init__(self, BUFFER_SIZE):
+        self.capacity = BUFFER_SIZE  # 메모리의 최대 저장 건수
         self.memory = []  # 실제 TD오차를 저장할 변수
         self.index = 0  # 저장 위치를 가리킬 인덱스 변수     
 
     def push(self, td_error):
         '''TD 오차를 메모리에 저장'''
-
         if len(self.memory) < self.capacity:
             self.memory.append(None)  # 메모리가 가득차지 않은 경우
         self.memory[self.index] =  td_error
