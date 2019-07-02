@@ -7,6 +7,7 @@ from pixel_per_model import DDQN
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
+import itertools
 
 BUFFER_SIZE = int(1e5)  # replay buffer size
 BATCH_SIZE = 32        # minibatch size
@@ -41,26 +42,22 @@ class Agent():
 
         # Replay memory
         self.memory = ReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, seed)
-        self.td_error_memory = TDerrorMemory(BUFFER_SIZE)
+        self.td_error_memory = TDerrorMemory(BATCH_SIZE)
         # Initialize time step (for updating every UPDATE_EVERY steps)
         self.t_step = 0
     
     def step(self, state, action, reward, next_state, done, i_episode):
         # Save experience in replay memory
         self.memory.add(state, action, reward, next_state, done)
-        
-        print(i_episode)
-        
+                
         # Learn every UPDATE_EVERY time steps.
         self.t_step = (self.t_step + 1) % UPDATE_EVERY
         if self.t_step == 0:
             if len(self.memory) > BATCH_SIZE :
-                
-                if i_episode < 30:
+                if i_episode < 3:
                     experiences = self.memory.stack_sample()
                 else:
                     indexes = self.td_error_memory.get_prioritized_indexes(BATCH_SIZE)
-                    print(indexes)
                     experiences = [self.memory[n] for n in indexes]
                 self.learn(experiences, GAMMA)
 
@@ -126,13 +123,14 @@ class Agent():
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-                
-        # TD 오차를 계산
-        td_errors = (rewards.float() + GAMMA * Q_targets_next.float()) - best_action_next.float()
+                                
+        ############ td_error안에 리스트가 들어가는것 부터 해결해야함 TD 오차를 계산
+        td_errors = (rewards.squeeze() + GAMMA * Q_targets_next.squeeze()) - best_action_next.squeeze().float()
+        #td_errors = (rewards + GAMMA * Q_targets_next) - best_action_next
         # state_action_values는 size[minibatch*1]이므로 squeeze() 메서드로 size[minibatch]로 변환
 
         # TD 오차 메모리를 업데이트. Tensor를 detach() 메서드로 꺼내와서 NumPy 변수로 변환하고 다시 파이썬 리스트로 변환
-        self.td_error_memory.memory = td_errors.detach().cpu().numpy().tolist()
+        self.td_error_memory.memory = td_errors.cpu().detach().numpy().tolist()
 
         # ------------------- update target network ------------------- #
         self.soft_update(self.qnetwork_local, self.qnetwork_target, TAU)                     
@@ -168,9 +166,9 @@ class ReplayBuffer:
             seed (int): random seed
         """
         self.action_size = action_size
-        #self.memory = deque(maxlen=buffer_size)  
+        self.memory = deque(maxlen=buffer_size)  
         self.capacity = batch_size
-        self.memory = []  # 실제 transition을 저장할 변수
+        #self.memory = []  # 실제 transition을 저장할 변수
         self.batch_size = batch_size
         self.experience = namedtuple("Experience", field_names=["state", "action", "reward", "next_state", "done"])
         self.seed = random.seed(seed)
@@ -178,14 +176,14 @@ class ReplayBuffer:
     
     def add(self, state, action, reward, next_state, done):
         """Add a new experience to memory."""
-        #e = self.experience(state, action, reward, next_state, done)
-        #self.memory.append(e)
+        e = self.experience(state, action, reward, next_state, done)
+        self.memory.append(e)
         
-        if len(self.memory) < self.capacity:
-            self.memory.append(None)
+        #if len(self.memory) < self.capacity:
+        #    self.memory.append(None)
             
-        self.memory[self.index] = self.experience(state, action, reward, next_state, done)
-        self.index = (self.index + 1) % self.capacity
+        #self.memory[self.index] = self.experience(state, action, reward, next_state, done)
+        #self.index = (self.index + 1) % self.capacity
     
     def sample(self):
         """Randomly sample a batch of experiences from memory."""
@@ -242,8 +240,8 @@ TD_ERROR_EPSILON = 0.0001  # 오차에 더해줄 바이어스
 
 class TDerrorMemory:
 
-    def __init__(self, BUFFER_SIZE):
-        self.capacity = BUFFER_SIZE  # 메모리의 최대 저장 건수
+    def __init__(self, BATCH_SIZE):
+        self.capacity = BATCH_SIZE  # 메모리의 최대 저장 건수
         self.memory = []  # 실제 TD오차를 저장할 변수
         self.index = 0  # 저장 위치를 가리킬 인덱스 변수     
 
@@ -252,8 +250,7 @@ class TDerrorMemory:
 
         if len(self.memory) < self.capacity:
             self.memory.append(None)  # 메모리가 가득차지 않은 경우
-
-        self.memory[self.index] = td_error
+        self.memory[self.index] =  td_error
         self.index = (self.index + 1) % self.capacity  # 다음 저장할 위치를 한 자리 뒤로 수정
 
     def __len__(self):
@@ -263,7 +260,7 @@ class TDerrorMemory:
     def get_prioritized_indexes(self, BATCH_SIZE):
         '''TD 오차에 따른 확률로 인덱스를 추출'''
 
-        # TD 오차의 합을 계산
+        # TD 오차의 합을 계산        
         sum_absolute_td_error = np.sum(np.absolute(self.memory))
         sum_absolute_td_error += TD_ERROR_EPSILON * len(self.memory)  # 충분히 작은 값을 더해줌
 
@@ -277,7 +274,7 @@ class TDerrorMemory:
         tmp_sum_absolute_td_error = 0
         for rand_num in rand_list:
             while tmp_sum_absolute_td_error < rand_num:
-                tmp_sum_absolute_td_error += (abs(self.memory[idx][0]) + TD_ERROR_EPSILON)
+                tmp_sum_absolute_td_error += (abs(self.memory[idx]) + TD_ERROR_EPSILON)
                 idx += 1
 
             # TD_ERROR_EPSILON을 더한 영향으로 인덱스가 실제 갯수를 초과했을 경우를 위한 보정
