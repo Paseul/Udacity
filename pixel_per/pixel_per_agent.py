@@ -54,11 +54,11 @@ class Agent():
         self.t_step = (self.t_step + 1) % UPDATE_EVERY
         if self.t_step == 0:
             if len(self.memory) > BATCH_SIZE :
-                if i_episode < 30:
-                    experiences = self.memory.stack_sample()
-                else:
-                    indexes = self.td_error_memory.get_prioritized_indexes(BATCH_SIZE)
-                    experiences = self.memory.index_sample(indexes)
+                #if i_episode < 30:
+                experiences = self.memory.stack_sample()
+                #else:
+                #    indexes = self.td_error_memory.get_prioritized_indexes(BATCH_SIZE)
+                #    experiences = self.memory.index_sample(indexes)
                 self.learn(experiences, GAMMA)
 
     def stack_state(self, state):
@@ -166,9 +166,9 @@ class ReplayBuffer:
             seed (int): random seed
         """
         self.action_size = action_size
-        #self.memory = deque(maxlen=buffer_size)  
+        self.memory = deque(maxlen=buffer_size)  
         self.capacity = buffer_size
-        self.memory = []  # 실제 transition을 저장할 변수
+        #self.memory = []  # 실제 transition을 저장할 변수
         self.batch_size = batch_size
         self.experience = namedtuple("Experience", field_names=["state", "action", "reward", "next_state", "done"])
         self.seed = random.seed(seed)
@@ -177,18 +177,15 @@ class ReplayBuffer:
     def add(self, state, action, reward, next_state, done):
         """Add a new experience to memory."""
         
-        if len(self.memory) < self.capacity:
-            self.memory.append(None)
-        
-        self.memory[self.index] = self.experience(state, action, reward, next_state, done)
-        #self.memory.append(e)
-        self.index = (self.index + 1) % self.capacity
         #if len(self.memory) < self.capacity:
         #    self.memory.append(None)
-            
-        #self.memory[self.index] = self.experience(state, action, reward, next_state, done)
+        
+        #self.memory[self.index] = self.experience(state, action, reward, next_state, done)        
         #self.index = (self.index + 1) % self.capacity
-    
+        
+        e = self.experience(state, action, reward, next_state, done)
+        self.memory.append(e)
+
     def sample(self):
         """Randomly sample a batch of experiences from memory."""
         experiences = random.sample(self.memory, k=self.batch_size)
