@@ -54,13 +54,12 @@ class Agent():
         self.t_step = (self.t_step + 1) % UPDATE_EVERY
         if self.t_step == 0:
             if len(self.memory) > BATCH_SIZE :
-                if i_episode < 3:
+                if i_episode < 30:
                     experiences = self.memory.stack_sample()
                 else:
                     indexes = self.td_error_memory.get_prioritized_indexes(BATCH_SIZE)
-                    for n in indexes:
-                        experiences = self.memory.index_sample(n)
-                        self.learn(experiences, GAMMA)
+                    experiences = self.memory.index_sample(indexes)
+                self.learn(experiences, GAMMA)
 
     def stack_state(self, state):
         if len(self.memory) >= 3:
@@ -124,20 +123,17 @@ class Agent():
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-        
-        print(rewards.shape)
-                                
+                                       
         ############ td_error안에 리스트가 들어가는것 부터 해결해야함 TD 오차를 계산
-        td_errors = (rewards.squeeze() + GAMMA * Q_targets_next.squeeze()) - best_action_next.squeeze().float()
+        td_errors = (rewards.squeeze() + GAMMA * Q_targets_next.squeeze()) - Q_expected.squeeze().float()
         #td_errors = (rewards + GAMMA * Q_targets_next) - best_action_next
         # state_action_values는 size[minibatch*1]이므로 squeeze() 메서드로 size[minibatch]로 변환
         #print(td_errors.shape)
         # TD 오차 메모리를 업데이트. Tensor를 detach() 메서드로 꺼내와서 NumPy 변수로 변환하고 다시 파이썬 리스트로 변환
         self.td_error_memory.memory = td_errors.cpu().detach().numpy().tolist()
-        #print(self.td_error_memory.memory)
 
         # ------------------- update target network ------------------- #
-        self.soft_update(self.qnetwork_local, self.qnetwork_target, TAU)                     
+        self.soft_update(self.qnetwork_local, self.qnetwork_target, TAU)  
 
     def soft_update(self, local_model, target_model, tau):
         """Soft update model parameters.
@@ -240,7 +236,7 @@ class ReplayBuffer:
   
         return (states, actions, rewards, next_states, dones)
 
-    def index_sample(self, idx):
+    def index_sample(self, indexes):
         """Randomly sample a batch of experiences from memory."""
         idx_states = []    
         actions = []
@@ -248,19 +244,20 @@ class ReplayBuffer:
         next_idx_states = []
         dones = []
         
-        exp = self.memory[idx].state
-        pre_exp = self.memory[idx-1].state
-        pre_pre_exp = self.memory[idx-2].state
-        pre_pre_pre_exp = self.memory[idx-3].state
-        next_exp = self.memory[idx% self.capacity+1].state
+        for idx in indexes:
+            exp = self.memory[idx].state
+            pre_exp = self.memory[idx-1].state
+            pre_pre_exp = self.memory[idx-2].state
+            pre_pre_pre_exp = self.memory[idx-3].state
+            next_exp = self.memory[idx% self.capacity+1].state
             
-        idx_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), axis=1)          
-        idx_states.append(idx_state)
-        actions.append(self.memory[idx].action)
-        rewards.append(self.memory[idx].reward)
-        next_idx_state = np.concatenate((pre_pre_exp, pre_exp, exp, next_exp), axis=1)
-        next_idx_states.append(next_idx_state)
-        dones.append(self.memory[idx].done)
+            idx_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), axis=1)          
+            idx_states.append(idx_state)
+            actions.append(self.memory[idx].action)
+            rewards.append(self.memory[idx].reward)
+            next_idx_state = np.concatenate((pre_pre_exp, pre_exp, exp, next_exp), axis=1)
+            next_idx_states.append(next_idx_state)
+            dones.append(self.memory[idx].done)
 
         states = torch.from_numpy(np.vstack([s for s in idx_states])).float().to(device)
         actions = torch.from_numpy(np.vstack([a for a in actions])).long().to(device)
@@ -285,8 +282,13 @@ class TDerrorMemory:
 
     def push(self, td_error):
         '''TD 오차를 메모리에 저장'''
+        
         if len(self.memory) < self.capacity:
-            self.memory.append(None)  # 메모리가 가득차지 않은 경우
+            self.memory.append(None)  # 메모리가 가득차지 않은 경우      
+        
+        if len(self.memory) -1 != self.index:
+            self.index = len(self.memory) -1
+
         self.memory[self.index] =  td_error
         self.index = (self.index + 1) % self.capacity  # 다음 저장할 위치를 한 자리 뒤로 수정
 
