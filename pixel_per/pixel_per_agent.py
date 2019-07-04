@@ -54,27 +54,40 @@ class Agent():
         self.t_step = (self.t_step + 1) % UPDATE_EVERY
         if self.t_step == 0:
             if len(self.memory) > BATCH_SIZE :
-                if i_episode < 300:
-                    experiences = self.memory.stack_sample()
-                else:
-                    experiences2 = self.memory.sample()
-                    self.calc_td_error(experiences2)
+                if i_episode < 3:
+                    experiences = self.memory.sample()
+                else:        
+                    self.calc_td_error()
                     indexes = self.td_error_memory.get_prioritized_indexes(BATCH_SIZE)
                     experiences = self.memory.index_sample(indexes)
                 self.learn(experiences, GAMMA)
 
     def stack_state(self, state):
-        if len(self.memory) >= 3:
+        if len(self.memory) >= 4:
             idx = len(self.memory)
-            pre_exp = self.memory.memory[idx-1].state
-            pre_pre_exp = self.memory.memory[idx-2].state
-            pre_pre_pre_exp = self.memory.memory[idx-3].state
-
-            stack_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, state), axis=1)
+            exp = self.memory.temp[idx-1].state
+            pre_exp = self.memory.temp[idx-2].state
+            pre_pre_exp = self.memory.temp[idx-3].state
+            pre_pre_pre_exp = self.memory.temp[idx-4].state
+            stack_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), axis=1)
         else:
             stack_state = np.concatenate((state, state, state, state), axis=1)
-
+        
         return stack_state
+    
+    def stack_next_state(self, next_state):
+        if len(self.memory) >= 4:
+            idx = len(self.memory)
+            exp = self.memory.temp[idx-1].next_state
+            pre_exp = self.memory.temp[idx-2].next_state
+            pre_pre_exp = self.memory.temp[idx-3].next_state
+            pre_pre_pre_exp = self.memory.temp[idx-4].next_state
+
+            stack_next_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), axis=1)
+        else:
+            stack_next_state = np.concatenate((next_state, next_state, next_state, next_state), axis=1)
+
+        return stack_next_state
         
     def act(self, state, eps=0.):
         """Returns actions for given state as per current policy.
@@ -129,7 +142,7 @@ class Agent():
         # ------------------- update target network ------------------- #
         self.soft_update(self.qnetwork_local, self.qnetwork_target, TAU)  
         
-    def calc_td_error(self, experiences):
+    def calc_td_error(self):
         """Update value parameters using given batch of experience tuples.
 
         Params
@@ -137,44 +150,15 @@ class Agent():
             experiences (Tuple[torch.Tensor]): tuple of (s, a, r, s', done) tuples 
             gamma (float): discount factor
         """        
+        experiences = self.memory.memory
+        batch = self.memory.experience(*zip(*experiences))
 
-        states, actions, rewards, next_states, dones = experiences
-
-        stack_states = []    
-        next_stack_states = []
+        states = torch.from_numpy(np.concatenate(batch.state))        
+        next_states = torch.from_numpy(np.concatenate(batch.next_state))        
+        rewards = torch.cat(batch.reward)
+        dones = torch.cat(batch.done)
+        actions = torch.cat(batch.action)
         
-        for idx in range(len(states)):
-            exp = states[idx]
-            exp = exp.reshape((-1,3,84,84))
-            nexp = next_states[idx]
-            nexp = nexp.reshape((-1,3,84,84))
-            
-            if idx >= 3:                
-                pre_exp = states[idx-1]
-                pre_exp = pre_exp.reshape((-1,3,84,84))
-                pre_pre_exp = states[idx-2]
-                pre_pre_exp = pre_pre_exp.reshape((-1,3,84,84))
-                pre_pre_pre_exp = states[idx-3]   
-                pre_pre_pre_exp = pre_pre_pre_exp.reshape((-1,3,84,84))
-                pre_next = next_states[idx-1]
-                pre_next = pre_next.reshape((-1,3,84,84))
-                pre_pre_nexp = next_states[idx-2]
-                pre_pre_nexp = pre_pre_nexp.reshape((-1,3,84,84))
-                pre_pre_pre_nexp = next_states[idx-3]
-                pre_pre_pre_nexp = pre_pre_pre_nexp.reshape((-1,3,84,84))
-                              
-                stack_state = torch.cat((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), dim=1)
-                next_stack_state = torch.cat((pre_pre_pre_nexp, pre_pre_nexp, pre_next, nexp), dim=1)
-            else:
-                stack_state = torch.cat((exp, exp, exp, exp), dim=1)
-                next_stack_state = torch.cat((nexp, nexp, nexp, nexp), dim=1)
-            
-            stack_states.append(stack_state)
-            next_stack_states.append(next_stack_state)
-        
-        states = torch.from_numpy(np.vstack([s.cpu() for s in stack_states])).float().to(device)       
-        next_states = torch.from_numpy(np.vstack([ns.cpu() for ns in next_stack_states])).float().to(device)     
-
         ## (1) Get the best action at next state using orininal Q network
         best_action_next = self.qnetwork_local(next_states).detach().argmax(1).unsqueeze(1)
         ## (2) calculate Q value using target network for next state at these actions, predicted at step 1      
@@ -227,6 +211,7 @@ class ReplayBuffer:
         """
         self.action_size = action_size
         self.memory = deque(maxlen=buffer_size)  
+        self.temp = deque(maxlen=buffer_size)  
         self.capacity = buffer_size
         #self.memory = []  # 실제 transition을 저장할 변수
         self.batch_size = batch_size
@@ -237,18 +222,34 @@ class ReplayBuffer:
     def add(self, state, action, reward, next_state, done):
         """Add a new experience to memory."""
         
-        #if len(self.memory) < self.capacity:
-        #    self.memory.append(None)
+        e = self.experience(state, action, reward, next_state, done)
+        self.temp.append(e)
         
-        #self.memory[self.index] = self.experience(state, action, reward, next_state, done)        
-        #self.index = (self.index + 1) % self.capacity
+        idx = len(self.temp)
+        exp = self.temp[idx-1].state
+        nexp = self.temp[idx-1].next_state
         
+        if len(self.temp) >= 4:            
+            pre_exp = self.temp[idx-2].state
+            pre_pre_exp = self.temp[idx-3].state
+            pre_pre_pre_exp = self.temp[idx-4].state
+            
+            pre_nexp = self.temp[idx-2].next_state
+            pre_pre_nexp = self.temp[idx-3].next_state
+            pre_pre_pre_nexp = self.temp[idx-4].next_state
+            
+            state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), axis=1)      
+            next_state = np.concatenate((pre_pre_pre_nexp, pre_pre_nexp, pre_nexp, nexp), axis=1)
+        else:
+            state = np.concatenate((state, state, state, state), axis=1)
+            next_state = np.concatenate((nexp, nexp, nexp, nexp), axis=1)
+    
         e = self.experience(state, action, reward, next_state, done)
         self.memory.append(e)
 
     def sample(self):
         """Randomly sample a batch of experiences from memory."""
-        experiences = self.memory
+        experiences = random.sample(self.memory, k=self.batch_size)
 
         states = torch.from_numpy(np.vstack([e.state for e in experiences if e is not None])).float().to(device)
         actions = torch.from_numpy(np.vstack([e.action for e in experiences if e is not None])).long().to(device)
@@ -258,63 +259,20 @@ class ReplayBuffer:
   
         return (states, actions, rewards, next_states, dones)
 
-    def stack_sample(self):
-        """Randomly sample a batch of experiences from memory."""
-        stack_states = []    
-        actions = []
-        rewards = []
-        next_stack_states = []
-        dones = []
-        
-        while len(stack_states) < self.batch_size:
-            idx = random.sample(range(len(self.memory)), k=1)[0]
-            exp = self.memory[idx].state
-            if exp is None or (idx-2) < 0 or (idx+1) >= len(self.memory):
-                continue
-            else:
-                pre_exp = self.memory[idx-1].state
-                pre_pre_exp = self.memory[idx-2].state
-                pre_pre_pre_exp = self.memory[idx-3].state
-                next_exp = self.memory[idx+1].state
-            
-            stack_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), axis=1) 
-            stack_states.append(stack_state)
-            actions.append(self.memory[idx].action)
-            rewards.append(self.memory[idx].reward)
-            next_stack_state = np.concatenate((pre_pre_exp, pre_exp, exp, next_exp), axis=1)
-            next_stack_states.append(next_stack_state)
-            dones.append(self.memory[idx].done)
-        
-        states = torch.from_numpy(np.vstack([s for s in stack_states])).float().to(device)     
-        actions = torch.from_numpy(np.vstack([a for a in actions])).long().to(device)
-        rewards = torch.from_numpy(np.vstack([r for r in rewards])).float().to(device)
-        next_states = torch.from_numpy(np.vstack([ns for ns in next_stack_states])).float().to(device)
-        dones = torch.from_numpy(np.vstack([d for d in dones]).astype(np.uint8)).float().to(device)
-        return (states, actions, rewards, next_states, dones)
-
     def index_sample(self, indexes):
         """Randomly sample a batch of experiences from memory."""
+        
         idx_states = []    
         actions = []
         rewards = []
         next_idx_states = []
         dones = []
         
-        for idx in indexes:
-            exp = self.memory[idx].state
-            pre_exp = self.memory[idx-1].state
-            pre_pre_exp = self.memory[idx-2].state
-            pre_pre_pre_exp = self.memory[idx-3].state
-            if idx+1 != len(self.memory):
-                next_exp = self.memory[idx+1].state
-            else:
-                next_exp = self.memory[idx].state
-            idx_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), axis=1)          
-            idx_states.append(idx_state)
+        for idx in indexes:       
+            idx_states.append(self.memory[idx].state)
             actions.append(self.memory[idx].action)
             rewards.append(self.memory[idx].reward)
-            next_idx_state = np.concatenate((pre_pre_exp, pre_exp, exp, next_exp), axis=1)
-            next_idx_states.append(next_idx_state)
+            next_idx_states.append(self.memory[idx].next_state)
             dones.append(self.memory[idx].done)
 
         states = torch.from_numpy(np.vstack([s for s in idx_states])).float().to(device)
