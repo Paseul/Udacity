@@ -9,7 +9,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import itertools
 
-BUFFER_SIZE = int(1e5)  # replay buffer size
+BUFFER_SIZE = int(1e4)  # replay buffer size
 BATCH_SIZE = 32        # minibatch size
 GAMMA = 0.99            # discount factor
 TAU = 1e-3              # for soft update of target parameters
@@ -151,13 +151,12 @@ class Agent():
             gamma (float): discount factor
         """        
         experiences = self.memory.memory
-        batch = self.memory.experience(*zip(*experiences))
 
-        states = torch.from_numpy(np.concatenate(batch.state))        
-        next_states = torch.from_numpy(np.concatenate(batch.next_state))        
-        rewards = torch.cat(batch.reward)
-        dones = torch.cat(batch.done)
-        actions = torch.cat(batch.action)
+        states = torch.from_numpy(np.vstack([e.state for e in experiences if e is not None])).float().to(device)
+        actions = torch.from_numpy(np.vstack([e.action for e in experiences if e is not None])).long().to(device)
+        rewards = torch.from_numpy(np.vstack([e.reward for e in experiences if e is not None])).float().to(device)
+        next_states = torch.from_numpy(np.vstack([e.next_state for e in experiences if e is not None])).float().to(device)
+        dones = torch.from_numpy(np.vstack([e.done for e in experiences if e is not None]).astype(np.uint8)).float().to(device)
         
         ## (1) Get the best action at next state using orininal Q network
         best_action_next = self.qnetwork_local(next_states).detach().argmax(1).unsqueeze(1)
