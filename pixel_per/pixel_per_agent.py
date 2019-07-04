@@ -54,11 +54,13 @@ class Agent():
         self.t_step = (self.t_step + 1) % UPDATE_EVERY
         if self.t_step == 0:
             if len(self.memory) > BATCH_SIZE :
-                #if i_episode < 30:
-                experiences = self.memory.stack_sample()
-                #else:
-                #    indexes = self.td_error_memory.get_prioritized_indexes(BATCH_SIZE)
-                #    experiences = self.memory.index_sample(indexes)
+                if i_episode < 300:
+                    experiences = self.memory.stack_sample()
+                else:
+                    experiences2 = self.memory.sample()
+                    self.calc_td_error(experiences2)
+                    indexes = self.td_error_memory.get_prioritized_indexes(BATCH_SIZE)
+                    experiences = self.memory.index_sample(indexes)
                 self.learn(experiences, GAMMA)
 
     def stack_state(self, state):
@@ -124,16 +126,74 @@ class Agent():
         loss.backward()
         self.optimizer.step()
                                        
+        # ------------------- update target network ------------------- #
+        self.soft_update(self.qnetwork_local, self.qnetwork_target, TAU)  
+        
+    def calc_td_error(self, experiences):
+        """Update value parameters using given batch of experience tuples.
+
+        Params
+        ======
+            experiences (Tuple[torch.Tensor]): tuple of (s, a, r, s', done) tuples 
+            gamma (float): discount factor
+        """        
+
+        states, actions, rewards, next_states, dones = experiences
+
+        stack_states = []    
+        next_stack_states = []
+        
+        for idx in range(len(states)):
+            exp = states[idx]
+            exp = exp.reshape((-1,3,84,84))
+            nexp = next_states[idx]
+            nexp = nexp.reshape((-1,3,84,84))
+            
+            if idx >= 3:                
+                pre_exp = states[idx-1]
+                pre_exp = pre_exp.reshape((-1,3,84,84))
+                pre_pre_exp = states[idx-2]
+                pre_pre_exp = pre_pre_exp.reshape((-1,3,84,84))
+                pre_pre_pre_exp = states[idx-3]   
+                pre_pre_pre_exp = pre_pre_pre_exp.reshape((-1,3,84,84))
+                pre_next = next_states[idx-1]
+                pre_next = pre_next.reshape((-1,3,84,84))
+                pre_pre_nexp = next_states[idx-2]
+                pre_pre_nexp = pre_pre_nexp.reshape((-1,3,84,84))
+                pre_pre_pre_nexp = next_states[idx-3]
+                pre_pre_pre_nexp = pre_pre_pre_nexp.reshape((-1,3,84,84))
+                              
+                stack_state = torch.cat((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), dim=1)
+                next_stack_state = torch.cat((pre_pre_pre_nexp, pre_pre_nexp, pre_next, nexp), dim=1)
+            else:
+                stack_state = torch.cat((exp, exp, exp, exp), dim=1)
+                next_stack_state = torch.cat((nexp, nexp, nexp, nexp), dim=1)
+            
+            stack_states.append(stack_state)
+            next_stack_states.append(next_stack_state)
+        
+        states = torch.from_numpy(np.vstack([s.cpu() for s in stack_states])).float().to(device)       
+        next_states = torch.from_numpy(np.vstack([ns.cpu() for ns in next_stack_states])).float().to(device)     
+
+        ## (1) Get the best action at next state using orininal Q network
+        best_action_next = self.qnetwork_local(next_states).detach().argmax(1).unsqueeze(1)
+        ## (2) calculate Q value using target network for next state at these actions, predicted at step 1      
+        Q_targets_next = self.qnetwork_target(next_states).gather(1, best_action_next)
+        
+        # Get max predicted Q values (for next states) from target model
+        #Q_targets_next = self.qnetwork_target(next_states).detach().max(1)[0].unsqueeze(1)
+        # Compute Q targets for current states 
+        Q_targets = rewards + (GAMMA * Q_targets_next * (1 - dones))
+
+        # Get expected Q values from local model
+        Q_expected = self.qnetwork_local(states).gather(1, actions)
+
         ############ td_error안에 리스트가 들어가는것 부터 해결해야함 TD 오차를 계산
         td_errors = (rewards.squeeze() + GAMMA * Q_targets_next.squeeze()) - Q_expected.squeeze().float()
-        #td_errors = (rewards + GAMMA * Q_targets_next) - best_action_next
-        # state_action_values는 size[minibatch*1]이므로 squeeze() 메서드로 size[minibatch]로 변환
-        #print(td_errors.shape)
+        
         # TD 오차 메모리를 업데이트. Tensor를 detach() 메서드로 꺼내와서 NumPy 변수로 변환하고 다시 파이썬 리스트로 변환
         self.td_error_memory.memory = td_errors.cpu().detach().numpy().tolist()
 
-        # ------------------- update target network ------------------- #
-        self.soft_update(self.qnetwork_local, self.qnetwork_target, TAU)  
 
     def soft_update(self, local_model, target_model, tau):
         """Soft update model parameters.
@@ -188,7 +248,7 @@ class ReplayBuffer:
 
     def sample(self):
         """Randomly sample a batch of experiences from memory."""
-        experiences = random.sample(self.memory, k=self.batch_size)
+        experiences = self.memory
 
         states = torch.from_numpy(np.vstack([e.state for e in experiences if e is not None])).float().to(device)
         actions = torch.from_numpy(np.vstack([e.action for e in experiences if e is not None])).long().to(device)
@@ -217,20 +277,19 @@ class ReplayBuffer:
                 pre_pre_pre_exp = self.memory[idx-3].state
                 next_exp = self.memory[idx+1].state
             
-            stack_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), axis=1)          
+            stack_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), axis=1) 
             stack_states.append(stack_state)
             actions.append(self.memory[idx].action)
             rewards.append(self.memory[idx].reward)
             next_stack_state = np.concatenate((pre_pre_exp, pre_exp, exp, next_exp), axis=1)
             next_stack_states.append(next_stack_state)
             dones.append(self.memory[idx].done)
-
-        states = torch.from_numpy(np.vstack([s for s in stack_states])).float().to(device)
+        
+        states = torch.from_numpy(np.vstack([s for s in stack_states])).float().to(device)     
         actions = torch.from_numpy(np.vstack([a for a in actions])).long().to(device)
         rewards = torch.from_numpy(np.vstack([r for r in rewards])).float().to(device)
         next_states = torch.from_numpy(np.vstack([ns for ns in next_stack_states])).float().to(device)
         dones = torch.from_numpy(np.vstack([d for d in dones]).astype(np.uint8)).float().to(device)
-  
         return (states, actions, rewards, next_states, dones)
 
     def index_sample(self, indexes):
@@ -246,8 +305,10 @@ class ReplayBuffer:
             pre_exp = self.memory[idx-1].state
             pre_pre_exp = self.memory[idx-2].state
             pre_pre_pre_exp = self.memory[idx-3].state
-            next_exp = self.memory[idx% self.capacity+1].state
-            
+            if idx+1 != len(self.memory):
+                next_exp = self.memory[idx+1].state
+            else:
+                next_exp = self.memory[idx].state
             idx_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), axis=1)          
             idx_states.append(idx_state)
             actions.append(self.memory[idx].action)
