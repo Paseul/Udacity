@@ -18,7 +18,7 @@ UPDATE_EVERY = 4        # how often to update the network
 REGULARIZATION = 1e-4   # regularization parameter
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
+#device = torch.device("cpu")
 class Agent():
     """Interacts with and learns from the environment."""
 
@@ -54,41 +54,25 @@ class Agent():
         self.t_step = (self.t_step + 1) % UPDATE_EVERY
         if self.t_step == 0:
             if len(self.memory) > BATCH_SIZE :
-                if i_episode < 3:
+                if i_episode < 300:
                     experiences = self.memory.sample()
-                else:        
-                    self.calc_td_error()
+                else:                      
                     indexes = self.td_error_memory.get_prioritized_indexes(BATCH_SIZE)
                     experiences = self.memory.index_sample(indexes)
                 self.learn(experiences, GAMMA)
 
     def stack_state(self, state):
-        if len(self.memory) >= 4:
+        if len(self.memory) >= 3:
             idx = len(self.memory)
-            exp = self.memory.temp[idx-1].state
-            pre_exp = self.memory.temp[idx-2].state
-            pre_pre_exp = self.memory.temp[idx-3].state
-            pre_pre_pre_exp = self.memory.temp[idx-4].state
-            stack_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), axis=1)
+            pre_exp = self.memory.temp[idx-1].state
+            pre_pre_exp = self.memory.temp[idx-2].state
+            pre_pre_pre_exp = self.memory.temp[idx-3].state
+            stack_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, state), axis=1)
         else:
             stack_state = np.concatenate((state, state, state, state), axis=1)
         
         return stack_state
-    
-    def stack_next_state(self, next_state):
-        if len(self.memory) >= 4:
-            idx = len(self.memory)
-            exp = self.memory.temp[idx-1].next_state
-            pre_exp = self.memory.temp[idx-2].next_state
-            pre_pre_exp = self.memory.temp[idx-3].next_state
-            pre_pre_pre_exp = self.memory.temp[idx-4].next_state
-
-            stack_next_state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), axis=1)
-        else:
-            stack_next_state = np.concatenate((next_state, next_state, next_state, next_state), axis=1)
-
-        return stack_next_state
-        
+            
     def act(self, state, eps=0.):
         """Returns actions for given state as per current policy.
         
@@ -119,6 +103,9 @@ class Agent():
         """
         states, actions, rewards, next_states, dones = experiences
         
+        self.qnetwork_local.eval()        
+        self.qnetwork_target.eval() 
+        
         ## (1) Get the best action at next state using orininal Q network
         best_action_next = self.qnetwork_local(next_states).detach().argmax(1).unsqueeze(1)
         ## (2) calculate Q value using target network for next state at these actions, predicted at step 1      
@@ -142,6 +129,9 @@ class Agent():
         # ------------------- update target network ------------------- #
         self.soft_update(self.qnetwork_local, self.qnetwork_target, TAU)  
         
+        self.qnetwork_local.train()
+        self.qnetwork_target.train()
+        
     def calc_td_error(self):
         """Update value parameters using given batch of experience tuples.
 
@@ -150,6 +140,9 @@ class Agent():
             experiences (Tuple[torch.Tensor]): tuple of (s, a, r, s', done) tuples 
             gamma (float): discount factor
         """        
+        #print(torch.cuda.memory_allocated(device=device))
+        #print(torch.cuda.memory_cached(device=device))
+        #torch.cuda.reset_max_memory_cached(device=device)
         experiences = self.memory.memory
 
         states = torch.from_numpy(np.vstack([e.state for e in experiences if e is not None])).float().to(device)
@@ -157,6 +150,9 @@ class Agent():
         rewards = torch.from_numpy(np.vstack([e.reward for e in experiences if e is not None])).float().to(device)
         next_states = torch.from_numpy(np.vstack([e.next_state for e in experiences if e is not None])).float().to(device)
         dones = torch.from_numpy(np.vstack([e.done for e in experiences if e is not None]).astype(np.uint8)).float().to(device)
+        
+        self.qnetwork_local.eval()        
+        self.qnetwork_target.eval() 
         
         ## (1) Get the best action at next state using orininal Q network
         best_action_next = self.qnetwork_local(next_states).detach().argmax(1).unsqueeze(1)
@@ -176,7 +172,9 @@ class Agent():
         
         # TD 오차 메모리를 업데이트. Tensor를 detach() 메서드로 꺼내와서 NumPy 변수로 변환하고 다시 파이썬 리스트로 변환
         self.td_error_memory.memory = td_errors.cpu().detach().numpy().tolist()
-
+        
+        self.qnetwork_local.train()
+        self.qnetwork_target.train()
 
     def soft_update(self, local_model, target_model, tau):
         """Soft update model parameters.
@@ -223,25 +221,22 @@ class ReplayBuffer:
         
         e = self.experience(state, action, reward, next_state, done)
         self.temp.append(e)
-        
-        idx = len(self.temp)
-        exp = self.temp[idx-1].state
-        nexp = self.temp[idx-1].next_state
-        
-        if len(self.temp) >= 4:            
-            pre_exp = self.temp[idx-2].state
-            pre_pre_exp = self.temp[idx-3].state
-            pre_pre_pre_exp = self.temp[idx-4].state
+  
+        if len(self.temp) >= 3:    
+            idx = len(self.temp)
+            pre_exp = self.temp[idx-1].state
+            pre_pre_exp = self.temp[idx-2].state
+            pre_pre_pre_exp = self.temp[idx-3].state
             
-            pre_nexp = self.temp[idx-2].next_state
-            pre_pre_nexp = self.temp[idx-3].next_state
-            pre_pre_pre_nexp = self.temp[idx-4].next_state
-            
-            state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, exp), axis=1)      
-            next_state = np.concatenate((pre_pre_pre_nexp, pre_pre_nexp, pre_nexp, nexp), axis=1)
+            pre_nexp = self.temp[idx-1].next_state
+            pre_pre_nexp = self.temp[idx-2].next_state
+            pre_pre_pre_nexp = self.temp[idx-3].next_state
+                        
+            state = np.concatenate((pre_pre_pre_exp, pre_pre_exp, pre_exp, state), axis=1)      
+            next_state = np.concatenate((pre_pre_exp, pre_exp, state, next_state), axis=1)
         else:
             state = np.concatenate((state, state, state, state), axis=1)
-            next_state = np.concatenate((nexp, nexp, nexp, nexp), axis=1)
+            next_state = np.concatenate((state, state, state, state), axis=1)
     
         e = self.experience(state, action, reward, next_state, done)
         self.memory.append(e)
