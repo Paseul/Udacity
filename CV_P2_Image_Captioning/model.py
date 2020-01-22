@@ -48,4 +48,38 @@ class DecoderRNN(nn.Module):
 
     def sample(self, inputs, states=None, max_len=20):
         " accepts pre-processed image tensor (inputs) and returns predicted sentence (list of tensor ids of length max_len) "
-        return inputs
+        outputs = []   
+        seq_len = 0
+        
+        while True:
+            # embedded image to lstm
+            output, states = self.lstm(inputs,states)
+           
+            # lstm output to linear function
+            output = self.fc(output.squeeze(1))
+            _, scores = torch.max(output, 1)
+            
+            # convert torch tensor to np.array
+            outputs.append(scores.cpu().numpy()[0].item())
+            
+            # if score is <end>
+            if (scores[0] == 1):
+                break
+            
+            # sentence length limit
+            if(seq_len == 20):
+                break;
+                
+            seq_len += 1
+            
+            # output to embed function
+            inputs = self.embed(scores)   
+            inputs = inputs.unsqueeze(1)
+
+        return outputs
+    
+    
+    
+    
+    
+    
